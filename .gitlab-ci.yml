@@ -2,10 +2,23 @@
 # See https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
 # Note that environment variables can be set in several places
 # See https://docs.gitlab.com/ee/ci/variables/#priority-of-environment-variables
-include:
-- template: Dependency-Scanning.gitlab-ci.yml
-- template: Security/SAST.gitlab-ci.yml
+image: node:12
+
 stages:
-- test
-sast:
+  - test
+  - fuzz
+
+unit_test:
   stage: test
+  script:
+    - echo "Stub for regular unit-tests"
+
+include:
+  - template: Coverage-Fuzzing.gitlab-ci.yml
+
+my_fuzz_target:
+  extends: .fuzz_base
+  script:
+    - npm config set @gitlab-org:registry https://gitlab.com/api/v4/packages/npm/ && npm i -g @gitlab-org/jsfuzz
+    - ./gitlab-cov-fuzz run --engine jsfuzz -- fuzz.js
+
