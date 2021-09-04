@@ -67,14 +67,21 @@ class Worker {
                     })
                 }
             } catch (e) {
-                console.log("=================================================================");
-                console.log(e);
-                this.dump_coverage();
-                // @ts-ignore
-                process.send({
-                    type: WorkerMessageType.CRASH,
-                });
-                process.exit(1);
+                setTimeout(() => {
+                    if (sigint) {
+                        this.dump_coverage();
+                        process.exit(0);
+                    } else {
+                        console.log("=================================================================");
+                        console.log(e);
+                        this.dump_coverage();
+                        // @ts-ignore
+                        process.send({
+                            type: WorkerMessageType.CRASH,
+                        });
+                        process.exit(1);
+                    }
+                }, 10);
             }
         });
     }
