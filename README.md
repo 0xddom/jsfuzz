@@ -111,16 +111,16 @@ bugs that were found using those targets are listed in the trophies section.
 
 | Keyword | type  | description |
 | ------ | ------ | ----------- |
-| target | string| path to file containing the fuzz target function |
-| dir | string     | pass zero or more corpus directories as command line arguments. The fuzzer will read test inputs from each of these corpus directories, and any new test inputs that are generated will be written back to the first corpus directory. single files can be passed as well and will be used as seed files |
-| regression | boolean | run the fuzzer through set of files for regression or reproduction |
-| exact-artifact-path | string | set exact artifact path for crashes/ooms |
-| rss-limit-mb | number | memory usage in MB (default: 2048) |
-| timeout | number | if input takes longer then this timeout (in seconds) the process is treated as failure case (default: 30) |
-| worker | boolean | run fuzzing worker (default: false) (hidden: true) |
-| versifier | boolean | use versifier algorithm (good for text based protocols (default: true) |
-| only-ascii | boolean | generate only ASCII (isprint+isspace) inputs (default: false) |
-| fuzzTime | number | the time(in seconds) of fuzzing during which there are no changes in the coverage. 0 is unlimited (default: 0) | 
+| target | string| Path to file containing the fuzz target function |
+| dir | string     | Pass zero or more corpus directories as command line arguments. The fuzzer will read test inputs from each of these corpus directories, and any new test inputs that are generated will be written back to the first corpus directory. single files can be passed as well and will be used as seed files |
+| regression | boolean | Run the fuzzer through set of files for regression or reproduction |
+| exact-artifact-path | string | Set exact artifact path for crashes/ooms |
+| rss-limit-mb | number | Memory usage in MB (default: 2048) |
+| timeout | number | If input takes longer then this timeout (in seconds) the process is treated as failure case (default: 30) |
+| worker | boolean | Run fuzzing worker (default: false) (hidden: true) |
+| versifier | boolean | Use versifier algorithm (good for text based protocols (default: true) |
+| only-ascii | boolean | Generate only ASCII (isprint+isspace) inputs (default: false) |
+| fuzzTime | number | The time(in seconds) of fuzzing during which there are no changes in the coverage. 0 is unlimited (default: 0) | 
 
 ### Coverage
 
