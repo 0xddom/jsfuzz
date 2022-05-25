@@ -113,7 +113,7 @@ bugs that were found using those targets are listed in the trophies section.
 | ------ | ------ | ----------- |
 | target | string| Path to file containing the fuzz target function |
 | dir | string     | Pass zero or more corpus directories as command line arguments. The fuzzer will read test inputs from each of these corpus directories, and any new test inputs that are generated will be written back to the first corpus directory. single files can be passed as well and will be used as seed files |
-| regression | boolean | Run the fuzzer through set of files for regression or reproduction |
+| regression | boolean | Run the fuzzer through set of files for regression or reproduction (default: false) |
 | exact-artifact-path | string | Set exact artifact path for crashes/ooms |
 | rss-limit-mb | number | Memory usage in MB (default: 2048) |
 | timeout | number | If input takes longer then this timeout (in seconds) the process is treated as failure case (default: 30) |
