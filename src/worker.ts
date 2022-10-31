@@ -52,13 +52,7 @@ class Worker {
                         this.dump_coverage();
                         process.exit(0);
                     }
-                    if (this.fn.constructor.name === 'AsyncFunction') {
-                        // @ts-ignore
-                        await this.fn(Buffer.from(m.buf.data));
-                    } else {
-                        // @ts-ignore
-                        this.fn(Buffer.from(m.buf.data));
-                    }
+                    await this.fn(Buffer.from(m.buf.data));
 
                     // @ts-ignore
                     process.send({
