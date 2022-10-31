@@ -52,7 +52,7 @@ class Worker {
                         this.dump_coverage();
                         process.exit(0);
                     }
-                    await this.fn(Buffer.from(m.buf.data));
+                    await this.fn(Buffer.from(m.buf));
 
                     // @ts-ignore
                     process.send({
