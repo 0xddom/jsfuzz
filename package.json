@@ -19,7 +19,6 @@
     "deep-equal": "^1.1.0",
     "istanbul-lib-hook": "^3.0.0",
     "istanbul-lib-instrument": "^3.3.0",
-    "nyc": "^15.1.0",
     "pidusage": "^2.0.17",
     "reflect-metadata": "^0.1.13",
     "yargs": "^14.2.0"
