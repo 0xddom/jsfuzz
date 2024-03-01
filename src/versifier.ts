@@ -59,20 +59,18 @@ class DynamicBuffer {
     }
 }
 
-function makeDict(s : Buffer): {string: {}} {
-    // @ts-ignore
-    let res : {string: {}} = {};
-    // @ts-ignore
+function makeDict(s : Buffer): {[key: string]: {}} {
+    let res : {[key: string]: {}} = {};
     res[s.toString()] = {};
     return res;
 }
 
-function randTerm(v: Verse, dict: {string: {}}): Buffer {
+function randTerm(v: Verse, dict: {[key: string]: {}}): Buffer {
     const terms = Object.keys(dict);
     return Buffer.from(terms[v.Rand(terms.length)]);
 }
 
-function singleTerm(dict: {string: {}}): string {
+function singleTerm(dict: {[key: string]: {}}): string {
     for (let k in dict) {
         return k;
     }
@@ -166,9 +164,9 @@ export class Verse {
 }
 
 class  WsNode {
-    public dict: {string: any};
+    public dict: {[key: string]: any};
 
-    constructor(dict: {string: any}) {
+    constructor(dict: {[key: string]: any}) {
         this.dict = dict;
     }
 
@@ -196,9 +194,9 @@ class  WsNode {
 }
 
 class AlphaNumNode {
-    public dict: {string: {}};
+    public dict: {[key: string]: {}};
 
-    constructor(dict: {string: {}}) {
+    constructor(dict: {[key: string]: {}}) {
         this.dict = dict;
     }
 
@@ -238,10 +236,10 @@ class AlphaNumNode {
 }
 
 class NumNode {
-    public dict: {string: {}};
+    public dict: {[key: string]: {}};
     private hex: boolean;
 
-    constructor(dict: {string: {}}, hex: boolean) {
+    constructor(dict: {[key: string]: {}}, hex: boolean) {
         this.dict = dict;
         this.hex = hex;
     }
@@ -353,8 +351,8 @@ class ControlNode {
 
 class BracketNode {
     public b: BlockNode;
-    private clos: number;
-    private open: number;
+    public clos: number;
+    public open: number;
     constructor(open: number, clos: number, b: BlockNode) {
         this.open = open;
         this.clos = clos;
@@ -372,12 +370,10 @@ class BracketNode {
             this.b.Generate(w, v);
             w.Write(Buffer.alloc(1, this.clos));
         } else {
-            const brk = ['<', '[', '(', '{', '\'', '"', '`'];
+            const brk: BracketOpen[] = ['<', '[', '(', '{', '\'', '"', '`'];
             const open = brk[v.Rand(brk.length)];
-            // @ts-ignore
             let clos = brackets[open];
             if (v.Rand(5) == 0) {
-                // @ts-ignore
                 clos = brackets[brk[v.Rand(brk.length)]];
             }
             w.Write(Buffer.from(open));
@@ -649,7 +645,12 @@ function extractNumbers(nn : Node[]): Node[] {
 }
 
 function structureKeyValue(nn : Node[]) : Node[]{
-    const delims = {'=': true, ':': true};
+    const delims: Record<string|number, true> = {
+        '=': true,
+        ':': true,
+        61: true, // equals
+        58: true, // colon
+    };
     for (let n of nn) {
         if (n instanceof  BracketNode) {
             n.b.nodes = structureKeyValue(n.b.nodes);
@@ -661,7 +662,7 @@ function structureKeyValue(nn : Node[]) : Node[]{
         if (!(n instanceof ControlNode)) {
             continue
         }
-        // @ts-ignore
+
         if (delims[n.ch] && !(i == 0 || i == nn.length-1 )) {
             const key = nn[i-1];
             if (!(key instanceof AlphaNumNode)) {
@@ -679,7 +680,9 @@ function structureKeyValue(nn : Node[]) : Node[]{
     return nn;
 }
 
-const brackets = {
+type BracketOpen = '<' | '[' | '(' | '{' | '\'' | '"' | '`';
+
+const brackets: Record<BracketOpen, string> = {
     '<':  '>',
     '[':  ']',
     '(':  ')',
@@ -712,11 +715,10 @@ function structureBrackets(nn: Node[]) : Node[]{
                 continue loop;
             }
         }
-        // @ts-ignore
-        const clos = brackets[String.fromCharCode(n.ch)];
+        const clos = brackets[String.fromCharCode(n.ch) as BracketOpen];
         if (clos) {
             stk.push( {
-                clos: clos,
+                clos: clos.charCodeAt(0),
                 open: n.ch,
                 pos: i,
             })
@@ -727,7 +729,12 @@ function structureBrackets(nn: Node[]) : Node[]{
 
 function structureLists(nn: Node[]) : Node[] {
 
-    const delims = {',': true, ';': true};
+    const delims: Record<string | number, true> = {
+        ',': true,
+        ';': true,
+        44: true, // comma
+        59: true, // semicolon
+    };
     for (let n of nn) {
         if (n instanceof  BracketNode) {
             n.b.nodes = structureLists(n.b.nodes);
@@ -738,9 +745,13 @@ function structureLists(nn: Node[]) : Node[] {
     // the first detected list is "v2", "f3"
     for (let i=nn.length-1; i>=0; i--) {
         const n = nn[i];
-        // @ts-ignore
         if (n instanceof ControlNode && delims[n.ch]) {
-            const elems = [
+            const elems: {
+                tok: Record<string, boolean>,
+                done: boolean,
+                pos: number,
+                inc: number
+            }[] = [
                 {tok: {}, done: false, pos: i-1, inc: -1},
                 {tok: {}, done: false, pos: i+1, inc: 1}
             ];
@@ -756,14 +767,11 @@ function structureLists(nn: Node[]) : Node[] {
                           e.done = true;
                           continue;
                       }
-                      // @ts-ignore
                       e.tok[ctrl1.ch] = true;
                   }
                   const brk1 = nn[e.pos];
                   if (brk1 instanceof BracketNode) {
-                      // @ts-ignore
                       e.tok[brk1.open] = true;
-                      // @ts-ignore
                       e.tok[brk1.clos] = true;
                   }
                   e.pos += e.inc;
@@ -771,13 +779,11 @@ function structureLists(nn: Node[]) : Node[] {
               if (elems[0].done && elems[1].done) {
                   break;
               }
-              const union = {};
+              const union: Record<string, boolean> = {};
               for (let k in elems[0].tok) {
-                  // @ts-ignore
                   union[k] = true;
               }
               for (let k in elems[1].tok) {
-                // @ts-ignore
                 union[k] = true;
               }
               if (DeepEqual(elems[0].tok, union) || DeepEqual(elems[1].tok, union)) {
@@ -786,7 +792,6 @@ function structureLists(nn: Node[]) : Node[] {
             }
 
             for (let k in elems[1].tok) {
-                // @ts-ignore
                 elems[0].tok[k] = true;
             }
 
@@ -794,12 +799,10 @@ function structureLists(nn: Node[]) : Node[] {
             for (let e of elems) {
                 for(; e.pos >=0 && e.pos < nn.length; e.pos += e.inc) {
                     const ctrl1 = nn[e.pos];
-                    // @ts-ignore
                     if (ctrl1 instanceof ControlNode && !elems[0].tok[ctrl1.ch]) {
                         continue elemLoop;
                     }
                     const brk1 = nn[e.pos];
-                    // @ts-ignore
                     if (brk1 instanceof ControlNode && !elems[0].tok[brk1.ch]) {
                         continue elemLoop;
                     }
@@ -815,14 +818,12 @@ function structureLists(nn: Node[]) : Node[] {
                         if (ctrl1.ch == n.ch) {
                             break
                         }
-                        // @ts-ignore
                         if (!elems[0].tok[ctrl1.ch]) {
                             break
                         }
                     }
                     const brk1 = nn[e.pos];
                     if (brk1 instanceof BracketNode) {
-                        // @ts-ignore
                         if (!elems[0].tok[brk1.open] || !elems[0].tok[brk1.clos]) {
                             break
                         }
@@ -854,14 +855,12 @@ function structureLists(nn: Node[]) : Node[] {
                         if (ctrl1.ch == n.ch) {
                             break;
                         }
-                        // @ts-ignore
                         if (!elems[0].tok[ctrl1.ch]) {
                             break;
                         }
                     }
                     const brk1 = nn[pos];
                     if (brk1 instanceof BracketNode) {
-                        // @ts-ignore
                         if (!elems[0].tok[brk1.open] || !elems[0].tok[brk1.clos]) {
                             break
                         }

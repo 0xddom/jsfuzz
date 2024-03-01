@@ -52,7 +52,7 @@ class Worker {
                         this.dump_coverage();
                         process.exit(0);
                     }
-                    if (this.fn.constructor.name === 'AsyncFunction') {
+                    if (isAsyncFunction(this.fn)) {
                         // @ts-ignore
                         await this.fn(Buffer.from(m.buf.data));
                     } else {
@@ -60,8 +60,7 @@ class Worker {
                         this.fn(Buffer.from(m.buf.data));
                     }
 
-                    // @ts-ignore
-                    process.send({
+                    process.send!({
                         type: WorkerMessageType.RESULT,
                         coverage: this.getTotalCoverage()
                     })
@@ -70,14 +69,17 @@ class Worker {
                 console.log("=================================================================");
                 console.log(e);
                 this.dump_coverage();
-                // @ts-ignore
-                process.send({
+                process.send!({
                     type: WorkerMessageType.CRASH,
                 });
                 process.exit(1);
             }
         });
     }
+}
+
+function isAsyncFunction(fn: Function): fn is (...args: any[]) => Promise<any> {
+    return fn.constructor.name === 'AsyncFunction';
 }
 
 const instrumenter = createInstrumenter({compact: true});
@@ -88,7 +90,6 @@ hookRequire((filePath) => true, (code, {filename}) => {
 });
 
 
-// @ts-ignore
 const fuzzTargetPath = path.join(process.cwd(), process.argv[2]);
 const fuzzTargetFn = require(fuzzTargetPath).fuzz;
 if (typeof fuzzTargetFn !== "function") {
