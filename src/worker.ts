@@ -18,58 +18,38 @@ class Worker {
     this.fn = fn;
   }
 
-  getTotalCoverage() {
-    let total = 0;
-    for (const filePath in global.__coverage__) {
-      for (const s in global.__coverage__[filePath].s) {
-        total += global.__coverage__[filePath].s[s] ? 1 : 0;
-      }
-      for (const f in global.__coverage__[filePath].f) {
-        total += global.__coverage__[filePath].f[f] ? 1 : 0;
-      }
-      for (const b in global.__coverage__[filePath].b) {
-        for (const i of global.__coverage__[filePath].b[b]) {
-          total += i ? 1 : 0;
-        }
-      }
+  checkTermination() {
+    if (sigint) {
+      process.exit(0);
     }
-
-    return total
-  }
-
-  dump_coverage() {
-    const data = JSON.stringify(global.__coverage__);
-    if (!fs.existsSync('./.nyc_output')) {
-      fs.mkdirSync('./.nyc_output');
-    }
-    fs.writeFileSync('./.nyc_output/cov.json', data);
   }
 
   start() {
+    setInterval(async () => {
+      this.checkTermination();
+    }, 1000);
     process.on('message', async (m: ManagerMessage) => {
+      console.log("WORKER: Recieved work!");
       try {
         if (m.type === ManageMessageType.WORK) {
-          if (sigint) {
-            this.dump_coverage();
-            process.exit(0);
-          }
+          this.checkTermination();
+          let buffer = Buffer.from(m.buf);
           if (isAsyncFunction(this.fn)) {
             // @ts-ignore
-            await this.fn(Buffer.from(m.buf.data));
+            await this.fn(buffer);
           } else {
             // @ts-ignore
-            this.fn(Buffer.from(m.buf.data));
+            this.fn(buffer);
           }
-
           process.send!({
             type: WorkerMessageType.RESULT,
-            coverage: this.getTotalCoverage()
+            coverage: global.__coverage__
           })
         }
+        console.log("Completed work!");
       } catch (e) {
         console.log("=================================================================");
         console.log(e);
-        this.dump_coverage();
         process.send!({
           type: WorkerMessageType.CRASH,
         });
@@ -84,27 +64,33 @@ function isAsyncFunction(fn: Function): fn is (...args: any[]) => Promise<any> {
 }
 
 const instrumenter = createInstrumenter({
-  compact: true, cache: false, plugins: parserPlugins.concat('typescript'), all: true, esModules: true
+  compact: true, cache: false, /*parserPlugins: parserPlugins.concat('typescript'),*/ esModules: true, produceSourceMap: true
 });
-// @ts-ignore
-hookRequire((filePath) => true, (code, { filename }) => {
-  console.log("#0 HOOK", filename);
-  let sourceMap = undefined;
-  if (fs.existsSync(filename + '.map')) {
-    console.log("#0 SOURCEMAP", filename + '.map');
-    let sourceMapPath = filename + '.map';
-    let sourceMap = JSON.parse(fs.readFileSync(sourceMapPath));
-  }
-  const newCode = instrumenter.instrumentSync(code, filename, sourceMap);
-  return newCode;
-});
-
-
 const fuzzTargetPath = path.join(process.cwd(), process.argv[2]);
+const fuzzBaseDir = path.dirname(fuzzTargetPath);
+// @ts-ignore
+hookRequire((filePath) => {
+  return filePath.startsWith(fuzzBaseDir);
+},
+  // @ts-ignore
+  (code, { filename }) => {
+    console.log("#0 HOOK", filename);
+    let sourceMap = undefined;
+    let sourceMapPath = filename + '.map';
+    if (fs.existsSync(sourceMapPath)) {
+      console.log("#0 SOURCEMAP", sourceMapPath);
+      let sourceMap = JSON.parse(fs.readFileSync(sourceMapPath));
+    }
+    const newCode = instrumenter.instrumentSync(code, filename, sourceMap);
+    return newCode;
+  });
+
+
 const fuzzTargetFn = require(fuzzTargetPath).fuzz;
 if (typeof fuzzTargetFn !== "function") {
   throw new Error(`${fuzzTargetPath} has no fuzz function exported`);
 }
 const worker = new Worker(fuzzTargetFn);
 worker.start();
+
 

@@ -4,6 +4,7 @@ import * as fs from "fs";
 import { ChildProcess, fork } from "child_process";
 import { ManageMessageType, WorkerMessage, WorkerMessageType } from "./protocol";
 import { BuildVerse, Verse } from "./versifier";
+import { global } from "./global";
 
 const crypto = require('crypto');
 const util = require('util');
@@ -37,6 +38,7 @@ export class Fuzzer {
   private readonly versifier: boolean;
   private readonly onlyAscii: boolean;
   private buf: Buffer;
+  private last_cov: any;
 
   constructor(target: string,
     dir: string[],
@@ -70,6 +72,7 @@ export class Fuzzer {
     this.lastSampleTime = Date.now();
     this.executionsInSample = 0;
     this.buf = Buffer.alloc(0);
+    this.last_cov = {};
   }
 
   logStats(type: string) {
@@ -93,6 +96,25 @@ export class Fuzzer {
     if (this.buf.length < 200) {
       console.log(`crash(hex)=${this.buf.toString('hex')}`)
     }
+  }
+
+  getTotalCoverage() {
+    let total = 0;
+    for (const filePath in this.last_cov) {
+      for (const s in this.last_cov[filePath].s) {
+        total += this.last_cov[filePath].s[s] ? 1 : 0;
+      }
+      for (const f in this.last_cov[filePath].f) {
+        total += this.last_cov[filePath].f[f] ? 1 : 0;
+      }
+      for (const b in this.last_cov[filePath].b) {
+        for (const i of this.last_cov[filePath].b[b]) {
+          total += i ? 1 : 0;
+        }
+      }
+    }
+
+    return total
   }
 
   clearIntervals() {
@@ -137,7 +159,7 @@ export class Fuzzer {
     this.pulseInterval = setInterval(() => {
 
       this.logStats("PULSE");
-
+      this.dump_coverage();
       // check fuzzTime and will sent SIGINT signal if time of fuzzing is reached
       if (this.fuzzTime !== 0) {
         let execTime = Date.now() / 1000 - this.startTime / 1000;
@@ -147,6 +169,8 @@ export class Fuzzer {
           this.worker.kill('SIGINT');
         }
       }
+
+
     }, 3000);
 
     this.rssInterval = setInterval(async () => {
@@ -168,6 +192,14 @@ export class Fuzzer {
     }, 3000);
   }
 
+  dump_coverage() {
+    const data = JSON.stringify(this.last_cov);
+    if (!fs.existsSync('./.nyc_output')) {
+      fs.mkdirSync('./.nyc_output');
+    }
+    fs.writeFileSync('./.nyc_output/cov.json', data);
+  }
+
   doRegression() {
     this.workQueue(() => this.corpus.shift());
   }
@@ -175,11 +207,15 @@ export class Fuzzer {
   sendWork(nextInput: () => Buffer | undefined) {
     let buf = nextInput();
     if (buf !== undefined) {
-      this.buf = buf;
+      // @ts-ignore
+      console.log(buf.data);
+      this.buf = buf.data;
       this.worker.send({
         type: ManageMessageType.WORK,
         buf: this.buf
       });
+    } else {
+      this.worker.kill('SIGINT');
     }
   }
 
@@ -208,30 +244,40 @@ export class Fuzzer {
       const endTimeOneSample = Date.now();
       const diffOneSample = endTimeOneSample - this.startTimeOneSample;
       this.startTimeOneSample = endTimeOneSample;
-
+      this.last_cov = m.coverage;
+      let cov = this.getTotalCoverage();
       if (m.type === WorkerMessageType.CRASH) {
+        if (this.regression) {
+          console.log('CRASH REPRODUCED!');
+        }
         this.writeCrash();
         this.clearIntervals();
         process.exitCode = 1;
         return;
-      } else if (m.coverage > this.total_coverage) {
+      } else if (cov > this.total_coverage) {
 
         // begin new time if cov has changed
         if (this.fuzzTime != 0) {
           this.startTime = Date.now();
         }
-        this.total_coverage = m.coverage;
-        this.corpus.putBuffer(this.buf);
-        this.logStats('NEW');
+        this.total_coverage = cov;
+        if (!this.regression) {
+          this.corpus.putBuffer(this.buf);
+          this.logStats('NEW');
 
-        if (this.buf.length > 0 && this.versifier) {
-          this.verse = BuildVerse(this.verse, this.buf);
+          if (this.buf.length > 0 && this.versifier) {
+            this.verse = BuildVerse(this.verse, this.buf);
+          }
         }
       } else if ((diffOneSample / 1000) > this.timeout) {
         console.log("=================================================================");
         console.log(`timeout reached. testcase took: ${diffOneSample}`);
         this.worker.kill('SIGKILL');
         return;
+      }
+      if (this.regression) {
+        console.log("CRASH NOT REPRODUCED!");
+        console.log(`  crash(hex)=${this.buf.toString('hex')}`)
       }
       this.sendWork(nextInput);
     });

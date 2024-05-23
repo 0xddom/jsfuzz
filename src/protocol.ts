@@ -1,18 +1,18 @@
 export enum WorkerMessageType {
-    RESULT,
-    CRASH,
+  RESULT,
+  CRASH,
 }
 export interface WorkerMessage {
-    type: WorkerMessageType,
-    coverage: number,
-    error: number
+  type: WorkerMessageType,
+  coverage: any,
+  error: number
 }
 
 export enum ManageMessageType {
-    WORK,
-    STOP,
+  WORK,
+  STOP,
 }
 export interface ManagerMessage {
-    type: ManageMessageType
-    buf: string
+  type: ManageMessageType
+  buf: Buffer
 }
