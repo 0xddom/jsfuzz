@@ -1,99 +1,109 @@
 const fs = require('fs');
 import * as path from "path";
-import {ManageMessageType, ManagerMessage, WorkerMessageType} from "./protocol";
+import { ManageMessageType, ManagerMessage, WorkerMessageType } from "./protocol";
 
-const {createInstrumenter} = require('istanbul-lib-instrument');
-const {hookRequire} = require('istanbul-lib-hook');
+const { parserPlugins } = require('@istanbuljs/schema').defaults.nyc;
+const { createInstrumenter } = require('istanbul-lib-instrument');
+const { hookRequire } = require('istanbul-lib-hook');
 let sigint = false;
 process.on('SIGINT', function() {
-    console.log('Received SIGINT. shutting down gracefully');
-    sigint = true;
+  console.log('Received SIGINT. shutting down gracefully');
+  sigint = true;
 });
 
 class Worker {
-    private readonly fn: (buf: Buffer) => void;
+  private readonly fn: (buf: Buffer) => void;
 
-    constructor(fn: (buf:Buffer) => void) {
-        this.fn = fn;
-    }
+  constructor(fn: (buf: Buffer) => void) {
+    this.fn = fn;
+  }
 
-    getTotalCoverage() {
-        let total = 0;
-        for (const filePath in global.__coverage__) {
-            for (const s in global.__coverage__[filePath].s) {
-                total += global.__coverage__[filePath].s[s] ? 1 : 0;
-            }
-            for (const f in global.__coverage__[filePath].f) {
-                total += global.__coverage__[filePath].f[f] ? 1 : 0;
-            }
-            for (const b in global.__coverage__[filePath].b) {
-                for (const i of global.__coverage__[filePath].b[b]) {
-                    total += i ? 1 : 0;
-                }
-            }
+  getTotalCoverage() {
+    let total = 0;
+    for (const filePath in global.__coverage__) {
+      for (const s in global.__coverage__[filePath].s) {
+        total += global.__coverage__[filePath].s[s] ? 1 : 0;
+      }
+      for (const f in global.__coverage__[filePath].f) {
+        total += global.__coverage__[filePath].f[f] ? 1 : 0;
+      }
+      for (const b in global.__coverage__[filePath].b) {
+        for (const i of global.__coverage__[filePath].b[b]) {
+          total += i ? 1 : 0;
         }
-
-        return total
+      }
     }
 
-    dump_coverage() {
-        const data = JSON.stringify(global.__coverage__);
-        if (!fs.existsSync('./.nyc_output')){
-            fs.mkdirSync('./.nyc_output');
+    return total
+  }
+
+  dump_coverage() {
+    const data = JSON.stringify(global.__coverage__);
+    if (!fs.existsSync('./.nyc_output')) {
+      fs.mkdirSync('./.nyc_output');
+    }
+    fs.writeFileSync('./.nyc_output/cov.json', data);
+  }
+
+  start() {
+    process.on('message', async (m: ManagerMessage) => {
+      try {
+        if (m.type === ManageMessageType.WORK) {
+          if (sigint) {
+            this.dump_coverage();
+            process.exit(0);
+          }
+          if (isAsyncFunction(this.fn)) {
+            // @ts-ignore
+            await this.fn(Buffer.from(m.buf.data));
+          } else {
+            // @ts-ignore
+            this.fn(Buffer.from(m.buf.data));
+          }
+
+          process.send!({
+            type: WorkerMessageType.RESULT,
+            coverage: this.getTotalCoverage()
+          })
         }
-        fs.writeFileSync('./.nyc_output/cov.json', data);
-    }
-
-    start() {
-        process.on('message', async (m: ManagerMessage) => {
-            try {
-                if (m.type === ManageMessageType.WORK) {
-                    if (sigint) {
-                        this.dump_coverage();
-                        process.exit(0);
-                    }
-                    if (isAsyncFunction(this.fn)) {
-                        // @ts-ignore
-                        await this.fn(Buffer.from(m.buf.data));
-                    } else {
-                        // @ts-ignore
-                        this.fn(Buffer.from(m.buf.data));
-                    }
-
-                    process.send!({
-                        type: WorkerMessageType.RESULT,
-                        coverage: this.getTotalCoverage()
-                    })
-                }
-            } catch (e) {
-                console.log("=================================================================");
-                console.log(e);
-                this.dump_coverage();
-                process.send!({
-                    type: WorkerMessageType.CRASH,
-                });
-                process.exit(1);
-            }
+      } catch (e) {
+        console.log("=================================================================");
+        console.log(e);
+        this.dump_coverage();
+        process.send!({
+          type: WorkerMessageType.CRASH,
         });
-    }
+        process.exit(1);
+      }
+    });
+  }
 }
 
 function isAsyncFunction(fn: Function): fn is (...args: any[]) => Promise<any> {
-    return fn.constructor.name === 'AsyncFunction';
+  return fn.constructor.name === 'AsyncFunction';
 }
 
-const instrumenter = createInstrumenter({compact: true});
+const instrumenter = createInstrumenter({
+  compact: true, cache: false, plugins: parserPlugins.concat('typescript'), all: true, esModules: true
+});
 // @ts-ignore
-hookRequire((filePath) => true, (code, {filename}) => {
-    const newCode = instrumenter.instrumentSync(code, filename);
-    return newCode;
+hookRequire((filePath) => true, (code, { filename }) => {
+  console.log("#0 HOOK", filename);
+  let sourceMap = undefined;
+  if (fs.existsSync(filename + '.map')) {
+    console.log("#0 SOURCEMAP", filename + '.map');
+    let sourceMapPath = filename + '.map';
+    let sourceMap = JSON.parse(fs.readFileSync(sourceMapPath));
+  }
+  const newCode = instrumenter.instrumentSync(code, filename, sourceMap);
+  return newCode;
 });
 
 
 const fuzzTargetPath = path.join(process.cwd(), process.argv[2]);
 const fuzzTargetFn = require(fuzzTargetPath).fuzz;
 if (typeof fuzzTargetFn !== "function") {
-    throw new Error(`${fuzzTargetPath} has no fuzz function exported`);
+  throw new Error(`${fuzzTargetPath} has no fuzz function exported`);
 }
 const worker = new Worker(fuzzTargetFn);
 worker.start();
