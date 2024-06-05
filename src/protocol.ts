@@ -14,5 +14,5 @@ export enum ManageMessageType {
 }
 export interface ManagerMessage {
   type: ManageMessageType
-  buf: Buffer
+  buf: string
 }

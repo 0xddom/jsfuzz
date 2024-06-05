@@ -29,11 +29,11 @@ class Worker {
       this.checkTermination();
     }, 1000);
     process.on('message', async (m: ManagerMessage) => {
-      console.log("WORKER: Recieved work!");
       try {
         if (m.type === ManageMessageType.WORK) {
           this.checkTermination();
-          let buffer = Buffer.from(m.buf);
+          // @ts-ignore
+          let buffer = Buffer.from(m.buf.data);
           if (isAsyncFunction(this.fn)) {
             // @ts-ignore
             await this.fn(buffer);
@@ -46,7 +46,6 @@ class Worker {
             coverage: global.__coverage__
           })
         }
-        console.log("Completed work!");
       } catch (e) {
         console.log("=================================================================");
         console.log(e);
@@ -64,13 +63,15 @@ function isAsyncFunction(fn: Function): fn is (...args: any[]) => Promise<any> {
 }
 
 const instrumenter = createInstrumenter({
-  compact: true, cache: false, /*parserPlugins: parserPlugins.concat('typescript'),*/ esModules: true, produceSourceMap: true
+  compact: false, cache: false, parserPlugins: parserPlugins.concat('typescript'), esModules: true, produceSourceMap: true
 });
 const fuzzTargetPath = path.join(process.cwd(), process.argv[2]);
 const fuzzBaseDir = path.dirname(fuzzTargetPath);
 // @ts-ignore
 hookRequire((filePath) => {
-  return filePath.startsWith(fuzzBaseDir);
+  // let shouldHook = filePath.startsWith(fuzzBaseDir);
+  // console.error("#0 HOOK Should hook", filePath, "?", shouldHook);
+  return true;
 },
   // @ts-ignore
   (code, { filename }) => {

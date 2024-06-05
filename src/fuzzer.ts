@@ -201,15 +201,17 @@ export class Fuzzer {
   }
 
   doRegression() {
-    this.workQueue(() => this.corpus.shift());
+    this.workQueue(() => {
+      let sample = this.corpus.shift();
+      return sample;
+    });
   }
 
   sendWork(nextInput: () => Buffer | undefined) {
     let buf = nextInput();
     if (buf !== undefined) {
       // @ts-ignore
-      console.log(buf.data);
-      this.buf = buf.data;
+      this.buf = buf;
       this.worker.send({
         type: ManageMessageType.WORK,
         buf: this.buf

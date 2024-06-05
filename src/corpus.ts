@@ -29,7 +29,8 @@ export class Corpus {
         }
         this.loadFiles(i)
       } else {
-        this.inputs.push(fs.readFileSync(i));
+        let contents = fs.readFileSync(i);
+        this.inputs.push(contents);
       }
     }
     this.seedLength = this.inputs.length;
